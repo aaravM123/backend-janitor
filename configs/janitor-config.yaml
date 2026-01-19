@@ -1,0 +1,189 @@
+# Backend Janitor Configuration
+# =============================
+# Central configuration file for all Backend Janitor tools.
+
+version: "1.0.0"
+
+# =============================================================================
+# SCANNING SETTINGS
+# =============================================================================
+
+scanning:
+  # Directories/files to exclude from scanning
+  exclude_patterns:
+    - "node_modules/"
+    - "venv/"
+    - ".venv/"
+    - "__pycache__/"
+    - "*.pyc"
+    - ".git/"
+    - "dist/"
+    - "build/"
+    - ".tox/"
+    - ".pytest_cache/"
+    - "*.egg-info/"
+    - ".mypy_cache/"
+
+  # Maximum file size to scan (in bytes)
+  max_file_size: 1048576  # 1MB
+
+  # Timeout for scanning operations (in seconds)
+  scan_timeout: 600  # 10 minutes
+
+# =============================================================================
+# PRIORITIZATION SETTINGS
+# =============================================================================
+
+prioritization:
+  # Default priority mode
+  # Options: security_first, tech_debt_first, severity, quick_wins
+  default_mode: "security_first"
+
+  # Severity scores (lower = higher priority)
+  security_scores:
+    critical: 1.0
+    high: 2.0
+    medium: 3.0
+    low: 6.0
+    unknown: 6.5
+
+  # Tech debt category scores
+  tech_debt_scores:
+    errors: 3.5
+    unused_imports: 4.0
+    dead_code: 4.2
+    complexity: 5.0
+    style: 7.0
+
+  # Complexity thresholds for recommendations
+  complexity_thresholds:
+    cyclomatic_complexity:
+      ok: 10
+      review: 15
+      split: 20
+      refactor: 25
+
+    lines_of_code:
+      ok: 50
+      review: 75
+      split: 100
+      refactor: 150
+
+    nesting_depth:
+      ok: 4
+      review: 5
+      split: 6
+      refactor: 7
+
+    parameter_count:
+      ok: 5
+      review: 6
+      split: 7
+      refactor: 8
+
+# =============================================================================
+# FIX SETTINGS
+# =============================================================================
+
+fixing:
+  # Safe fixes that can be auto-applied without review
+  safe_fix_rules:
+    - "F401"  # Unused imports
+    - "F841"  # Unused variables (with caution)
+    - "W291"  # Trailing whitespace
+    - "W292"  # No newline at end of file
+    - "W293"  # Blank line contains whitespace
+    - "I001"  # Import sorting
+
+  # Maximum fixes per session
+  max_fixes_per_session: 50
+
+  # Always run tests after fixes
+  run_tests_after_fix: true
+
+  # Rollback on test failure
+  rollback_on_failure: true
+
+# =============================================================================
+# PR CREATION SETTINGS
+# =============================================================================
+
+pull_request:
+  # Default branch name pattern
+  branch_pattern: "janitor/{type}-{date}"
+
+  # Create as draft by default
+  draft_by_default: true
+
+  # PR title templates
+  title_templates:
+    security: "Security: Fix {count} vulnerabilities"
+    tech_debt: "Cleanup: Remove {count} code quality issues"
+    full: "Backend Janitor: {security_count} security + {tech_debt_count} cleanup fixes"
+
+  # Labels to add
+  default_labels:
+    - "automated"
+    - "backend-janitor"
+
+# =============================================================================
+# OUTPUT SETTINGS
+# =============================================================================
+
+output:
+  # Default output format
+  format: "json"  # Options: json, text, markdown
+
+  # Include code snippets in reports
+  include_snippets: true
+
+  # Maximum snippet length
+  max_snippet_length: 200
+
+  # Output file names
+  files:
+    security_report: "janitor-security.json"
+    tech_debt_report: "janitor-tech-debt.json"
+    unified_report: "janitor-report.json"
+
+# =============================================================================
+# TOOL-SPECIFIC SETTINGS
+# =============================================================================
+
+tools:
+  semgrep:
+    # Semgrep ruleset to use
+    config: "auto"  # Uses semgrep's auto-detection
+
+    # Additional rule paths
+    extra_rules: []
+
+    # Timeout (seconds)
+    timeout: 600
+
+  ruff:
+    # Rules to enable
+    select:
+      - "F"    # Pyflakes
+      - "E"    # pycodestyle errors
+      - "W"    # pycodestyle warnings
+      - "C901" # complexity
+      - "I"    # isort
+      - "N"    # pep8-naming
+      - "B"    # flake8-bugbear
+      - "UP"   # pyupgrade
+      - "SIM"  # flake8-simplify
+
+    # Rules to ignore
+    ignore:
+      - "E501"  # Line too long (let formatter handle)
+
+    # Line length
+    line_length: 88
+
+  complexity_analyzer:
+    # Only report functions exceeding these thresholds
+    report_threshold:
+      cyclomatic_complexity: 10
+      lines_of_code: 50
+      nesting_depth: 4

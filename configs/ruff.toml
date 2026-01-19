@@ -1,0 +1,105 @@
+# Ruff Configuration for Backend Janitor
+# =======================================
+# This configuration is used by ruff_analyzer.py
+
+[tool.ruff]
+# Target Python version
+target-version = "py310"
+
+# Line length (same as Black)
+line-length = 88
+
+# Exclude common directories
+exclude = [
+    ".git",
+    ".tox",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+    "*.egg-info",
+    ".mypy_cache",
+    ".pytest_cache",
+]
+
+[tool.ruff.lint]
+# Rules to enable
+select = [
+    # Pyflakes - detect various errors
+    "F",
+
+    # pycodestyle errors
+    "E",
+
+    # pycodestyle warnings
+    "W",
+
+    # mccabe complexity
+    "C901",
+
+    # isort - import sorting
+    "I",
+
+    # pep8-naming
+    "N",
+
+    # flake8-bugbear - find likely bugs
+    "B",
+
+    # pyupgrade - upgrade syntax
+    "UP",
+
+    # flake8-simplify - simplification suggestions
+    "SIM",
+
+    # flake8-comprehensions
+    "C4",
+]
+
+# Rules to ignore
+ignore = [
+    # Line too long - let formatter handle this
+    "E501",
+
+    # Missing docstring in public module
+    "D100",
+
+    # Missing docstring in public class
+    "D101",
+
+    # Missing docstring in public method
+    "D102",
+
+    # Missing docstring in public function
+    "D103",
+]
+
+# Allow autofix for all enabled rules
+fixable = ["ALL"]
+
+# Never try to fix these
+unfixable = []
+
+[tool.ruff.lint.per-file-ignores]
+# Tests can have unused imports for fixtures
+"tests/**/*.py" = ["F401", "F811"]
+
+# __init__.py can have unused imports
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.mccabe]
+# Maximum cyclomatic complexity
+max-complexity = 10
+
+[tool.ruff.lint.isort]
+# Force single line imports
+force-single-line = false
+
+# Known first party modules
+known-first-party = ["tools", "contextshard"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Allow default arguments like datetime.datetime.now
+extend-immutable-calls = ["datetime.datetime.now", "datetime.date.today"]

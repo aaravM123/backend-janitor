@@ -1,0 +1,58 @@
+# Environment files
+.env.local
+.env
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Scan output files (Backend Janitor outputs)
+*_scan*.json
+*_results*.json
+*_findings*.json
+scan_output.json
+raw_output.txt
+janitor-*.json
+
+# Test/debug scripts (temporary development files)
+test_*.py
+temp_*.py
+fix_*.py
+analyze_*.py
+check_*.py
+parse_*.py
+show_*.py
+run_scan.py
+simple_*.py
+extract_*.py
+
+# Cache folders
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Claude Code
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db

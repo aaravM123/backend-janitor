@@ -1,0 +1,94 @@
+version: 1.0.0
+title: Backend Janitor - Scan & Prioritize
+description: |
+  Sub-recipe that runs all scanners and produces a prioritized list of issues.
+  This is the "analysis" phase - it finds problems but doesn't fix them.
+
+  Runs:
+  1. semgrep_scanner.py - Security vulnerabilities
+  2. ruff_analyzer.py - Code quality issues
+  3. complexity_analyzer.py - Complex functions
+  4. prioritizer.py --unified - Combined, sorted list
+
+parameters:
+  - key: project_path
+    input_type: string
+    requirement: required
+    description: Path to the project directory to scan
+
+  - key: priority_mode
+    input_type: select
+    requirement: optional
+    default: "security_first"
+    description: How to prioritize issues
+    options:
+      - security_first   # Security issues before tech debt
+      - tech_debt_first  # Tech debt before security
+      - severity         # By severity regardless of type
+      - quick_wins       # Easiest fixes first
+
+  - key: output_file
+    input_type: string
+    requirement: optional
+    default: "janitor-report.json"
+    description: Where to save the prioritized findings
+
+extensions:
+  - type: builtin
+    name: developer
+    timeout: 300
+
+instructions: |
+  You are the Backend Janitor Scanner. Your job is to analyze a codebase
+  and produce a prioritized list of issues to fix.
+
+  ## Your Tools (in ./tools/)
+
+  1. **semgrep_scanner.py** - Find security vulnerabilities
+     ```bash
+     python ./tools/semgrep_scanner.py {{ project_path }} > semgrep_results.json
+     ```
+
+  2. **ruff_analyzer.py** - Find code quality issues
+     ```bash
+     python ./tools/ruff_analyzer.py {{ project_path }} > ruff_results.json
+     ```
+
+  3. **complexity_analyzer.py** - Find complex functions
+     ```bash
+     python ./tools/complexity_analyzer.py {{ project_path }} > complexity_results.json
+     ```
+
+  4. **prioritizer.py** - Combine and prioritize all findings
+     ```bash
+     python ./tools/prioritizer.py --unified \
+         --security semgrep_results.json \
+         --ruff ruff_results.json \
+         --complexity complexity_results.json \
+         --mode {{ priority_mode }} \
+         --json > {{ output_file }}
+     ```
+
+  ## Workflow
+
+  1. Run all three scanners in sequence
+  2. Run the unified prioritizer to combine results
+  3. Save the output to {{ output_file }}
+  4. Print a summary of what was found
+
+  ## Output Format
+
+  The final output should show:
+  - Total issues found (security vs tech debt)
+  - Breakdown by severity
+  - Top 10 issues to fix first
+  - Quick wins count
+
+prompt: |
+  Scan {{ project_path }} for security vulnerabilities and tech debt.
+
+  Priority mode: {{ priority_mode }}
+  Output file: {{ output_file }}
+
+  Run all scanners, combine the results with the prioritizer, and show me
+  a summary of what needs to be fixed.

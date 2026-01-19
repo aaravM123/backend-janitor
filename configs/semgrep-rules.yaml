@@ -1,0 +1,200 @@
+# Custom Semgrep Rules for Backend Janitor
+# =========================================
+# These rules supplement the default semgrep auto-detection.
+# Place this file in the project root or specify with --config
+
+rules:
+  # ==========================================================================
+  # PYTHON SECURITY RULES
+  # ==========================================================================
+
+  - id: python-sql-injection-format-string
+    languages: [python]
+    message: |
+      SQL injection vulnerability: Using f-string or .format() in SQL query.
+      Use parameterized queries instead.
+    severity: ERROR
+    metadata:
+      category: security
+      subcategory: sql-injection
+      confidence: HIGH
+      cwe: "CWE-89"
+      owasp: "A03:2021 Injection"
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $QUERY = f"...SELECT...{$VAR}..."
+          - pattern: |
+              $QUERY = f"...INSERT...{$VAR}..."
+          - pattern: |
+              $QUERY = f"...UPDATE...{$VAR}..."
+          - pattern: |
+              $QUERY = f"...DELETE...{$VAR}..."
+          - pattern: |
+              $QUERY = "...SELECT...".format(...)
+          - pattern: |
+              $QUERY = "...INSERT...".format(...)
+
+  - id: python-hardcoded-secret
+    languages: [python]
+    message: |
+      Hardcoded secret detected. Use environment variables or a secrets manager.
+    severity: WARNING
+    metadata:
+      category: security
+      subcategory: secrets
+      confidence: MEDIUM
+      cwe: "CWE-798"
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $VAR = "..."
+          - pattern: |
+              $VAR = '...'
+    pattern-regex: '(?i)(password|secret|api_key|apikey|token|auth)\s*=\s*["\'][^"\']{8,}["\']'
+
+  - id: python-command-injection
+    languages: [python]
+    message: |
+      Potential command injection. Use subprocess with list arguments instead.
+    severity: ERROR
+    metadata:
+      category: security
+      subcategory: command-injection
+      confidence: HIGH
+      cwe: "CWE-78"
+      owasp: "A03:2021 Injection"
+    patterns:
+      - pattern-either:
+          - pattern: os.system($CMD)
+          - pattern: os.popen($CMD)
+          - pattern: subprocess.call($CMD, shell=True, ...)
+          - pattern: subprocess.run($CMD, shell=True, ...)
+          - pattern: subprocess.Popen($CMD, shell=True, ...)
+
+  - id: python-insecure-deserialization
+    languages: [python]
+    message: |
+      Insecure deserialization with pickle. Avoid pickle for untrusted data.
+    severity: WARNING
+    metadata:
+      category: security
+      subcategory: deserialization
+      confidence: MEDIUM
+      cwe: "CWE-502"
+    patterns:
+      - pattern-either:
+          - pattern: pickle.load(...)
+          - pattern: pickle.loads(...)
+          - pattern: cPickle.load(...)
+          - pattern: cPickle.loads(...)
+
+  - id: python-weak-hash
+    languages: [python]
+    message: |
+      Weak hashing algorithm (MD5/SHA1). Use SHA-256 or stronger for security.
+    severity: WARNING
+    metadata:
+      category: security
+      subcategory: cryptography
+      confidence: MEDIUM
+      cwe: "CWE-328"
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.md5(...)
+          - pattern: hashlib.sha1(...)
+
+  # ==========================================================================
+  # JAVASCRIPT/TYPESCRIPT SECURITY RULES
+  # ==========================================================================
+
+  - id: js-xss-innerhtml
+    languages: [javascript, typescript]
+    message: |
+      Potential XSS vulnerability: Using innerHTML with user input.
+      Use textContent or sanitize the input.
+    severity: WARNING
+    metadata:
+      category: security
+      subcategory: xss
+      confidence: MEDIUM
+      cwe: "CWE-79"
+      owasp: "A03:2021 Injection"
+    pattern: $EL.innerHTML = $INPUT
+
+  - id: js-eval-usage
+    languages: [javascript, typescript]
+    message: |
+      Avoid using eval() - it can lead to code injection vulnerabilities.
+    severity: ERROR
+    metadata:
+      category: security
+      subcategory: code-injection
+      confidence: HIGH
+      cwe: "CWE-95"
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: new Function(...)
+
+  - id: js-hardcoded-secret
+    languages: [javascript, typescript]
+    message: |
+      Potential hardcoded secret. Use environment variables instead.
+    severity: WARNING
+    metadata:
+      category: security
+      subcategory: secrets
+      confidence: MEDIUM
+      cwe: "CWE-798"
+    pattern-regex: '(?i)(password|secret|api_key|apikey|token|auth)\s*[:=]\s*["\'][^"\']{8,}["\']'
+
+  # ==========================================================================
+  # GO SECURITY RULES
+  # ==========================================================================
+
+  - id: go-sql-injection
+    languages: [go]
+    message: |
+      SQL injection vulnerability: Using string formatting in SQL query.
+      Use parameterized queries with ? or $1 placeholders.
+    severity: ERROR
+    metadata:
+      category: security
+      subcategory: sql-injection
+      confidence: HIGH
+      cwe: "CWE-89"
+    patterns:
+      - pattern-either:
+          - pattern: |
+              fmt.Sprintf("...SELECT...%s...", $VAR)
+          - pattern: |
+              fmt.Sprintf("...INSERT...%s...", $VAR)
+          - pattern: |
+              "..." + $VAR + "..."
+
+  # ==========================================================================
+  # GENERAL RULES (ALL LANGUAGES)
+  # ==========================================================================
+
+  - id: generic-hardcoded-ip
+    languages: [generic]
+    message: |
+      Hardcoded IP address found. Consider using configuration or DNS.
+    severity: INFO
+    metadata:
+      category: security
+      subcategory: configuration
+      confidence: LOW
+    pattern-regex: '\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b'
+
+  - id: generic-todo-fixme
+    languages: [generic]
+    message: |
+      TODO/FIXME comment found - may indicate incomplete implementation.
+    severity: INFO
+    metadata:
+      category: maintainability
+      subcategory: tech-debt
+      confidence: HIGH
+    pattern-regex: '(?i)\b(TODO|FIXME|HACK|XXX)\b'
