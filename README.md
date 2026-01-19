@@ -232,5 +232,3 @@ Comprehensive configuration in `configs/janitor-config.yaml`:
 - PR creation templates and labels
 
 Override with: `BACKEND_JANITOR_CONFIG=/path/to/config.yaml`
-
-Built by engineers who understand that **security analysis shouldn't be limited by arbitrary context windows**.
