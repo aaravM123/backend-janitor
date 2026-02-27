@@ -31,6 +31,74 @@ load_env()
 
 # Token threshold - if codebase exceeds this, use ContextShard
 SINGLE_LLM_THRESHOLD = 100_000  # tokens
+CLAUDE_MODEL = "anthropic/claude-opus-4-6"
+KIMI_GROQ_MODEL = "moonshotai/kimi-k2-instruct-0905"
+
+
+def _default_model() -> str:
+    """Select default model from env, preferring explicit override."""
+    configured = os.getenv("CONTEXTSHARD_MODEL")
+    if configured:
+        return configured
+    if os.getenv("OPENROUTER_API_KEY"):
+        return CLAUDE_MODEL
+    if os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY"):
+        return CLAUDE_MODEL
+    if os.getenv("GROQ_API_KEY"):
+        return KIMI_GROQ_MODEL
+    return "deepseek-chat"
+
+
+def _resolve_llm_settings(model: Optional[str]) -> tuple[str, Optional[str], Optional[str]]:
+    """
+    Resolve model + credentials + endpoint.
+
+    Returns:
+        (resolved_model, api_key, base_url)
+    """
+    resolved_model = model or _default_model()
+    model_lower = resolved_model.lower()
+
+    # Optional explicit global overrides
+    override_key = os.getenv("LLM_API_KEY")
+    override_base = os.getenv("LLM_BASE_URL")
+    if override_key or override_base:
+        return resolved_model, override_key, override_base
+
+    if "deepseek" in model_lower:
+        return (
+            resolved_model,
+            os.getenv("DEEPSEEK_API_KEY"),
+            os.getenv("DEEPSEEK_BASE_URL"),
+        )
+
+    if "/" in resolved_model or "openrouter" in model_lower:
+        # OpenRouter models (e.g. anthropic/claude-opus-4-6)
+        return (
+            resolved_model,
+            os.getenv("OPENROUTER_API_KEY"),
+            os.getenv("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1",
+        )
+
+    if "claude" in model_lower or "anthropic" in model_lower:
+        return (
+            resolved_model,
+            os.getenv("CLAUDE_API_KEY") or os.getenv("ANTHROPIC_API_KEY"),
+            os.getenv("ANTHROPIC_BASE_URL"),
+        )
+
+    if "kimi" in model_lower or "moonshotai/" in model_lower:
+        return (
+            resolved_model,
+            os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY"),
+            os.getenv("GROQ_BASE_URL") or "https://api.groq.com/openai/v1",
+        )
+
+    return (
+        resolved_model,
+        os.getenv("OPENAI_API_KEY"),
+        os.getenv("OPENAI_BASE_URL"),
+    )
 
 
 def estimate_tokens(project_path: str) -> int:
@@ -58,10 +126,11 @@ def estimate_tokens(project_path: str) -> int:
 async def analyze_codebase(
     project_path: str,
     task: str = "security_vulnerability_scan",
-    model: str = "deepseek-chat",
-    force_distributed: bool = False,
+    model: Optional[str] = None,
+    force_distributed: bool = True,
     num_instances: Optional[int] = None,
     sync_rounds: int = 3,
+    exclude_dirs: Optional[list[str]] = None,
 ) -> dict:
     """
     Analyze a codebase - automatically uses ContextShard for large codebases.
@@ -73,29 +142,41 @@ async def analyze_codebase(
         force_distributed: Force use of ContextShard even for small codebases
         num_instances: Number of LLM instances (auto-calculated if None)
         sync_rounds: Number of synchronization rounds
+        exclude_dirs: List of directory names to exclude from indexing
 
     Returns:
         Analysis results with findings, recommendations, and cross-shard issues
     """
+    resolved_model, api_key, base_url = _resolve_llm_settings(model)
     project_path = str(Path(project_path).resolve())
     token_count = estimate_tokens(project_path)
 
     print(f"Analyzing codebase: {project_path}")
     print(f"Estimated tokens: {token_count:,}")
+    print(f"Model: {resolved_model}")
+    if exclude_dirs:
+        print(f"Excluding directories: {', '.join(exclude_dirs)}")
 
     if token_count < SINGLE_LLM_THRESHOLD and not force_distributed:
         # Small codebase - use simple single-shot analysis
         print(f"Using single-LLM analysis (under {SINGLE_LLM_THRESHOLD:,} token threshold)")
-        return await _single_llm_analysis(project_path, task, model)
+        return await _single_llm_analysis(project_path, task, resolved_model, api_key, base_url)
     else:
         # Large codebase - use ContextShard distributed analysis
         print(f"Using ContextShard distributed analysis (over threshold or forced)")
         return await _distributed_analysis(
-            project_path, task, model, num_instances, sync_rounds
+            project_path, task, resolved_model, num_instances, sync_rounds, api_key, base_url,
+            exclude_dirs=exclude_dirs,
         )
 
 
-async def _single_llm_analysis(project_path: str, task: str, model: str) -> dict:
+async def _single_llm_analysis(
+    project_path: str,
+    task: str,
+    model: str,
+    api_key: Optional[str],
+    base_url: Optional[str],
+) -> dict:
     """Simple single-LLM analysis for small codebases."""
     try:
         from contextshard.llm import get_provider, Message
@@ -105,7 +186,7 @@ async def _single_llm_analysis(project_path: str, task: str, model: str) -> dict
             "error": "contextshard not installed. Run: pip install -e ./contextshard"
         }
 
-    provider = get_provider(model)
+    provider = get_provider(model, api_key=api_key, base_url=base_url)
 
     # Gather code files
     code_content = []
@@ -144,6 +225,9 @@ async def _distributed_analysis(
     model: str,
     num_instances: Optional[int],
     sync_rounds: int,
+    api_key: Optional[str],
+    base_url: Optional[str],
+    exclude_dirs: Optional[list[str]] = None,
 ) -> dict:
     """Use ContextShard for distributed large codebase analysis."""
     try:
@@ -166,6 +250,9 @@ async def _distributed_analysis(
         model=model,
         sync_rounds=sync_rounds,
         max_tokens_per_shard=80_000,
+        api_key=api_key,
+        base_url=base_url,
+        exclude_dirs=exclude_dirs,
     )
 
     result = await coordinator.analyze(
@@ -255,17 +342,19 @@ CODE TO ANALYZE:
 
 # CLI interface
 if __name__ == "__main__":
-    import sys
+    import argparse
 
-    if len(sys.argv) < 2:
-        print("Usage: python large_codebase_analyzer.py <project_path> [task]")
-        print("\nTasks: security_vulnerability_scan, tech_debt_scan, full_scan")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="ContextShard Large Codebase Analyzer")
+    parser.add_argument("project_path", help="Path to the codebase to analyze")
+    parser.add_argument("task", nargs="?", default="security_vulnerability_scan",
+                        choices=["security_vulnerability_scan", "tech_debt_scan", "full_scan"],
+                        help="Analysis task (default: security_vulnerability_scan)")
+    parser.add_argument("--exclude", nargs="+", default=None,
+                        help="Directory names to exclude (e.g. --exclude docs tests scripts)")
 
-    project = sys.argv[1]
-    task = sys.argv[2] if len(sys.argv) > 2 else "security_vulnerability_scan"
+    args = parser.parse_args()
 
-    result = asyncio.run(analyze_codebase(project, task))
+    result = asyncio.run(analyze_codebase(args.project_path, args.task, exclude_dirs=args.exclude))
 
     if result["success"]:
         print("\n" + "=" * 60)
@@ -275,5 +364,25 @@ if __name__ == "__main__":
             print(result["analysis"])
         elif "summary" in result:
             print(result["summary"])
+            findings = result.get("findings", [])
+            if findings:
+                print("\nDETAILED FINDINGS:")
+                for idx, finding in enumerate(findings, 1):
+                    severity = str(finding.get("severity", "unknown")).upper()
+                    category = finding.get("category", "issue")
+                    file_path = finding.get("file", "unknown")
+                    line_num = finding.get("line", 0)
+                    message = finding.get("message", "").strip()
+                    print(f"{idx}. [{severity}] {category} at {file_path}:{line_num}")
+                    if message:
+                        print(f"   {message}")
+
+            cross_shard = result.get("cross_shard_issues", [])
+            if cross_shard:
+                print("\nCROSS-SHARD ISSUES:")
+                for idx, issue in enumerate(cross_shard, 1):
+                    severity = str(issue.get("severity", "unknown")).upper()
+                    title = issue.get("title", "untitled")
+                    print(f"{idx}. [{severity}] {title}")
     else:
         print(f"Error: {result.get('error', 'Unknown error')}")

@@ -75,12 +75,13 @@ class CShardBridge:
                 "Please build it with: cd cshard && go build"
             )
 
-    def index(self, codebase_path: str) -> dict:
+    def index(self, codebase_path: str, exclude_dirs: Optional[list[str]] = None) -> dict:
         """
         Index a codebase.
 
         Args:
             codebase_path: Path to the codebase root
+            exclude_dirs: List of directory names to exclude from indexing
 
         Returns:
             Dictionary with:
@@ -90,7 +91,10 @@ class CShardBridge:
             - languages: Language breakdown
             - dependencies: Import graph
         """
-        output = self._run("index", codebase_path)
+        args = ["index", codebase_path]
+        for d in (exclude_dirs or []):
+            args.append(f"--exclude={d}")
+        output = self._run(*args)
         return json.loads(output)
 
     def shard(

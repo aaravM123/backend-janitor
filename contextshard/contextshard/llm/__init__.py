@@ -49,6 +49,15 @@ def get_provider(
             base_url=base_url,
             **kwargs,
         )
+    elif "/" in model or "openrouter" in model_lower:
+        # OpenRouter models use vendor/model format (e.g. anthropic/claude-opus-4-6)
+        import os
+        return OpenAIProvider(
+            model=model,
+            api_key=api_key or os.getenv("OPENROUTER_API_KEY"),
+            base_url=base_url or "https://openrouter.ai/api/v1",
+            **kwargs,
+        )
     elif "gpt" in model_lower:
         return OpenAIProvider(
             model=model,

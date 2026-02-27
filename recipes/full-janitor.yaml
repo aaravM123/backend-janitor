@@ -93,7 +93,17 @@ instructions: |
   6. **pr_creator.py** - Create GitHub PRs
      Run: `python ./tools/pr_creator.py check` (verify setup)
 
+  7. **large_codebase_analyzer.py** - ContextShard distributed LLM analysis
+     Run: `python ./tools/large_codebase_analyzer.py <project_path> security_vulnerability_scan`
+     Uses ContextShard for large codebases and surfaces cross-file/cross-shard risks.
+
   ## Complete Workflow
+
+  ### Phase 0: ContextShard Distributed Analysis
+  ```bash
+  python ./tools/large_codebase_analyzer.py {{ project_path }} security_vulnerability_scan
+  ```
+  Use this output as architecture-aware context before static scans.
 
   ### Phase 1: Security Scan
   ```bash
@@ -266,18 +276,19 @@ prompt: |
   {% if create_pr == "true" %}PR Title: {{ pr_title }}{% endif %}
 
   Please:
-  1. Run the security scan (semgrep_scanner.py)
-  2. Run the tech debt scan (ruff_analyzer.py + complexity_analyzer.py)
-  3. Create a unified report with all findings
-  4. Prioritize based on {{ priority }} setting
+  1. Run ContextShard distributed analysis first (large_codebase_analyzer.py)
+  2. Run the security scan (semgrep_scanner.py)
+  3. Run the tech debt scan (ruff_analyzer.py + complexity_analyzer.py)
+  4. Create a unified report with all findings
+  5. Prioritize based on {{ priority }} setting
   {% if mode == "report" %}
-  5. Show me the report and recommendations (don't fix anything)
+  6. Show me the report and recommendations (don't fix anything)
   {% elif mode == "fix_safe" %}
-  5. Auto-fix safe issues (unused imports), ask before other fixes
+  6. Auto-fix safe issues (unused imports), ask before other fixes
   {% elif mode == "fix_all" %}
-  5. Fix all issues with my approval
+  6. Fix all issues with my approval
   {% elif mode == "pr" %}
-  5. Fix all issues and create a pull request
+  6. Fix all issues and create a pull request
   {% endif %}
 
-  Start by running the security scan on the project.
+  Start by running ContextShard analysis on the project.

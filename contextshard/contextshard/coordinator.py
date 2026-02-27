@@ -46,12 +46,13 @@ class FSDPCoordinator:
     def __init__(
         self,
         num_instances: int = 4,
-        model: str = "deepseek-chat",
+        model: str = "anthropic/claude-opus-4-6",
         sync_rounds: int = 3,
         max_tokens_per_shard: int = 100000,
         llm_client: Optional[Any] = None,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
+        exclude_dirs: Optional[list[str]] = None,
     ):
         """
         Initialize the coordinator.
@@ -64,11 +65,13 @@ class FSDPCoordinator:
             llm_client: Pre-configured LLM client (optional)
             api_key: API key for LLM provider (optional, uses env var if not set)
             base_url: Base URL for API (optional, for custom endpoints)
+            exclude_dirs: List of directory names to exclude from indexing
         """
         self.num_instances = num_instances
         self.model = model
         self.sync_rounds = sync_rounds
         self.max_tokens_per_shard = max_tokens_per_shard
+        self.exclude_dirs = exclude_dirs or []
 
         # Set up LLM client
         if llm_client:
@@ -99,10 +102,15 @@ class FSDPCoordinator:
             )
 
         # Determine provider from model name
-        if "deepseek" in self.model.lower():
+        model_lower = self.model.lower()
+        if "deepseek" in model_lower:
             default_base = "https://api.deepseek.com"
             env_key = "DEEPSEEK_API_KEY"
-        elif "gpt" in self.model.lower():
+        elif "/" in self.model or "openrouter" in model_lower:
+            # OpenRouter models use vendor/model format (e.g. anthropic/claude-opus-4-6)
+            default_base = "https://openrouter.ai/api/v1"
+            env_key = "OPENROUTER_API_KEY"
+        elif "gpt" in model_lower:
             default_base = "https://api.openai.com/v1"
             env_key = "OPENAI_API_KEY"
         else:
@@ -166,7 +174,7 @@ class FSDPCoordinator:
     async def _prepare_shards(self, codebase_path: str) -> list[CodeShard]:
         """Index and shard the codebase using Go binary."""
         # Index
-        index = self.bridge.index(codebase_path)
+        index = self.bridge.index(codebase_path, exclude_dirs=self.exclude_dirs)
 
         # Calculate optimal number of shards
         total_tokens = index.get("total_tokens", 0)

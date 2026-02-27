@@ -37,7 +37,7 @@ class LLMInstance:
         instance_id: int,
         shard: CodeShard,
         llm_client: Any,
-        model: str = "deepseek-chat",
+        model: str = "anthropic/claude-opus-4-6",
         codebase_root: str = ".",
     ):
         self.id = instance_id
@@ -73,14 +73,15 @@ Files depending on other shards: {len(external_deps)}
 Other shards depending on you: {exported_to}
 
 Your job is to:
-1. Deeply understand the code in your shard
-2. Report what you export (functions, classes other shards might use)
-3. Report what you need from other shards
-4. Find security vulnerabilities and code quality issues
-5. Discover cross-shard issues (problems that span multiple shards)
+1. Read EVERY line of code in your shard - do not skim
+2. Report exports (functions, classes other shards use)
+3. Report what you import from outside
+4. Hunt for CRASH BUGS: unhandled exceptions, None/null access, missing error handling on I/O and parsing, resource leaks, infinite loops, index out-of-bounds, race conditions, division by zero, unchecked return values
+5. Find security vulnerabilities: injection, auth bypass, data exposure
+6. Find cross-shard issues that span multiple shards
 
-You will receive updates from other instances about what they contain.
-Use this information to understand cross-shard dependencies and attack paths.
+Think adversarially: for every function, ask "what input breaks this?"
+Trace error propagation - where do exceptions go unhandled across files?
 
 Always respond in a structured format that can be parsed."""
 
@@ -135,49 +136,53 @@ Always respond in a structured format that can be parsed."""
         """Build prompt for round 0: discover what's in our shard."""
         return """ROUND 0: DISCOVERY
 
-Please analyze your shard and report:
+Analyze every function and code path in your shard. Report:
 
-1. EXPORTS - What functions, classes, and variables does your shard export?
+1. EXPORTS - Functions, classes, and variables your shard exports
    Format: EXPORT: <type> <name> in <file> - <brief description>
 
-2. IMPORTS - What does your shard need from outside?
+2. IMPORTS - What your shard needs from outside
    Format: IMPORT: <name> from <module> - <how it's used>
 
-3. INITIAL_FINDINGS - Any obvious issues you notice?
+3. INITIAL_FINDINGS - Bugs, crash risks, and vulnerabilities
    Format: FINDING: [SEVERITY] <category> in <file>:<line> - <description>
+   Look hard for: missing error handling, unguarded None access, unchecked
+   I/O operations, resource leaks, unsafe parsing, and unvalidated inputs
 
-Be thorough but concise. Other instances will receive your exports."""
+Be thorough - read every line. Other instances will receive your exports."""
 
     def _build_analysis_prompt(self, task: str) -> str:
         """Build prompt for analysis rounds with cross-shard context."""
         context_str = self._format_cross_shard_context()
 
-        return f"""ROUND: ANALYSIS WITH CROSS-SHARD CONTEXT
+        return f"""ROUND: DEEP ANALYSIS WITH CROSS-SHARD CONTEXT
 
 TASK: {task}
 
 CONTEXT FROM OTHER SHARDS:
 {context_str}
 
-Based on YOUR code AND the context from other shards:
+For every function in YOUR code, ask: what input crashes this? Then report:
 
-1. SECURITY_FINDINGS - Vulnerabilities in your code
+1. CRASH_AND_SECURITY_FINDINGS - Bugs that cause crashes or security holes
    Format: SECURITY: [SEVERITY] <category> in <file>:<line>
-   Description: <what's wrong>
+   Description: <what's wrong and what input triggers it>
    Cross-shard context: <if this involves other shards, explain>
    Suggested fix: <how to fix>
+   Categories: unhandled_exception, null_access, resource_leak, race_condition,
+   infinite_loop, index_oob, missing_validation, unchecked_io, injection, auth_bypass
 
-2. CROSS_SHARD_ISSUES - Problems that span multiple shards
+2. CROSS_SHARD_CRASH_PATHS - Crash/failure paths spanning multiple shards
    Format: CROSS_SHARD: [SEVERITY] <title>
    Shards involved: <list of shard IDs>
-   Attack path: <step by step how an attacker could exploit this>
+   Crash path: <step by step how this leads to a crash or data corruption>
    Description: <detailed explanation>
 
 3. QUESTIONS - Things you need to know from other shards
    Format: QUESTION for shard <N>: <question>
    Context: <why you're asking>
 
-Focus on finding issues that SPAN MULTIPLE SHARDS - these are the most valuable."""
+Focus on HARD-TO-FIND bugs: error propagation across files, edge cases in parsing/I/O, missing cleanup, and crashes under unusual or adversarial inputs."""
 
     def _format_cross_shard_context(self) -> str:
         """Format context received from other instances."""
@@ -203,7 +208,7 @@ Focus on finding issues that SPAN MULTIPLE SHARDS - these are the most valuable.
             model=self.model,
             messages=messages,
             temperature=0.1,  # Low temperature for consistent analysis
-            max_tokens=4000,
+            max_tokens=8000,
         )
 
         return response.choices[0].message.content
